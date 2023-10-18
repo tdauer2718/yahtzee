@@ -1,11 +1,7 @@
-from abc import ABC, abstractmethod
-from collections import Counter, defaultdict
+from collections import Counter
 from dataclasses import dataclass
 from enum import Enum
 import itertools
-import matplotlib.pyplot as plt
-import math
-import numpy as np
 import pandas as pd
 import random
 from typing import Dict, List, Optional, Set, Tuple, Union
@@ -39,6 +35,15 @@ class BoxCategories:
         Box.Yahtzee,
         Box.Chance,
     }
+
+UPPER_BOX_VALUES: Dict[Box, int] = {
+    Box.Ones: 1,
+    Box.Twos: 2,
+    Box.Threes: 3,
+    Box.Fours: 4,
+    Box.Fives: 5,
+    Box.Sixes: 6,
+}
 
 
 class RollAction:
@@ -104,18 +109,50 @@ class RollValues:
             mode = max(self.values, key=lambda k: self.value_counts[k])
         return mode
 
+    def score_from_box(self, box: Box) -> int:
+        """
+        Gives the score for this roll when `box` is chosen.
+        """
+        for box in BoxCategories.UpperBox:
+            value = UPPER_BOX_VALUES[box]
+            return self.value_counts[value] * value if value in self.value_counts else 0
+        if box == Box.ThreeOfAKind:
+            if self.checks_lower_box(Box.ThreeOfAKind):
+                v = [v for v, c in self.value_counts.items() if c >= 3][0]
+                score = self.value_counts[v] * v
+            else:
+                score = 0
+            return score
+        if box == Box.FourOfAKind:
+            if self.checks_lower_box(Box.FourOfAKind):
+                v = [v for v, c in self.value_counts.items() if c >= 4][0]
+                score = self.value_counts[v] * v
+            else:
+                score = 0
+            return score
+        if box == Box.FullHouse:
+            return 25 if self.checks_lower_box(Box.FullHouse) else 0
+        if box == Box.SmallStraight:
+            return 30 if self.checks_lower_box(Box.SmallStraight) else 0
+        if box == Box.LargeStraight:
+            return 40 if self.checks_lower_box(Box.LargeStraight) else 0
+        if box == Box.Yahtzee:
+            return 50 if self.checks_lower_box(Box.Yahtzee) else 0
+        if box == Box.Chance:
+            return sum(self.values)
+        else:
+            raise ValueError("Please choose one of the 13 boxes on the scorecard.")
+
     @property
     def score_actions(self) -> List[ScoreAction]:
         """
-        Gives the possible score actions for a roll, acting as if the Score Card is empty.
+        Gives the possible score actions for a roll, acting as if the ScoreCard is empty.
         """
         results = []
 
-        upper_boxes = [Box.Ones, Box.Twos, Box.Threes, Box.Fours, Box.Fives, Box.Sixes]
-        for box, value in zip(upper_boxes, range(1, 7)):
-            score = (
-                self.value_counts[value] * value if value in self.value_counts else 0
-            )
+        for box in BoxCategories.UpperBox:
+            score = self.score_from_box(box)
+            value = UPPER_BOX_VALUES[box]
             dice_values = (
                 self.value_counts[value] * (value,)
                 if value in self.value_counts
@@ -124,25 +161,25 @@ class RollValues:
             results.append(ScoreAction(score, dice_values, box))
 
         if self.checks_lower_box(Box.ThreeOfAKind):
+            score = self.score_from_box(Box.ThreeOfAKind)
             v = [v for v, c in self.value_counts.items() if c >= 3][0]
-            score = 3 * v
-            dice_values = 3 * (v,)
+            dice_values = self.value_counts[v] * (v,)
             box = Box.ThreeOfAKind
             results.append(ScoreAction(score, dice_values, box))
         else:
             results.append(ScoreAction(0, (), Box.ThreeOfAKind))
 
         if self.checks_lower_box(Box.FourOfAKind):
+            score = self.score_from_box(Box.FourOfAKind)
             v = [v for v, c in self.value_counts.items() if c >= 4][0]
-            score = 4 * v
-            dice_values = 4 * (v,)
+            dice_values = self.value_counts[v]  * (v,)
             box = Box.FourOfAKind
             results.append(ScoreAction(score, dice_values, box))
         else:
             results.append(ScoreAction(0, (), Box.FourOfAKind))
 
         if self.checks_lower_box(Box.FullHouse):
-            score = 25
+            score = self.score_from_box(Box.FullHouse)
             dice_values = tuple(
                 v for v in self.values
             )  # copy instead of reference (perhaps unnecessary)
@@ -152,7 +189,7 @@ class RollValues:
             results.append(ScoreAction(0, (), Box.FullHouse))
 
         if self.checks_lower_box(Box.SmallStraight):
-            score = 30
+            score = self.score_from_box(Box.SmallStraight)
             box = Box.SmallStraight
             if self.checks_lower_box(Box.LargeStraight):
                 dice_values = tuple(v for v in self.values)
@@ -169,7 +206,7 @@ class RollValues:
             results.append(ScoreAction(0, (), Box.SmallStraight))
 
         if self.checks_lower_box(Box.LargeStraight):
-            score = 40
+            score = self.score_from_box(Box.LargeStraight)
             dice_values = tuple(v for v in self.values)
             box = Box.LargeStraight
             results.append(ScoreAction(score, dice_values, box))
@@ -181,8 +218,8 @@ class RollValues:
             # Later I will likely add that functionality at the GameState
             # level instead of here, since I'd prefer that the RollValues class
             # not depend on ScoreCard. (I may change my mind on this.)
+            score = self.score_from_box(Box.Yahtzee)
             v = self.values[0]
-            score = 50
             dice_values = 5 * (v,)
             box = Box.Yahtzee
             results.append(ScoreAction(score, dice_values, box))
@@ -190,7 +227,7 @@ class RollValues:
             results.append(ScoreAction(0, (), Box.Yahtzee))
 
         # Chance
-        score = sum(self.values)
+        score = self.score_from_box(Box.Chance)
         dice_values = tuple(v for v in self.values)
         box = Box.Chance
         results.append(ScoreAction(score, dice_values, box))
@@ -418,48 +455,3 @@ class GameState:
             raise ValueError(
                 "action must be an instance of `ScoreAction` or `RollAction`."
             )
-
-
-class Agent(ABC):
-    def __init__(self, narrate: bool = False):
-        self.narrate = narrate
-
-    def play_single_game(self) -> ScoreCard:
-        game_state = GameState(narrate=self.narrate)
-        for _ in range(13):
-            game_state.start_turn()
-            while game_state.turn_started:
-                action = self.choose_action(game_state)
-                game_state.take_action(action)
-        if self.narrate:
-            print("Final scorecard:\n")
-            print(game_state.scorecard, end="\n\n")
-            print(f"Final score = {game_state.scorecard.score}")
-        return game_state.scorecard
-
-    @abstractmethod
-    def choose_action(self, game_state: GameState) -> Union[RollAction, ScoreAction]:
-        """Use self.game_state to choose a possible action."""
-        ...
-
-    def play_games(
-        self, n_games: int, plot_results: bool = True, histogram_bins: int = 20
-    ) -> List[int]:
-        """
-        Plays the specified number of games with the Agent, returning the Agent's final score
-        for each game and optionally plotting the results in a histogram.
-        """
-        agent_scores = []
-        for _ in range(n_games):
-            scorecard = self.play_single_game()
-            agent_scores.append(scorecard.score)
-        if plot_results:
-            plt.hist(agent_scores, bins=histogram_bins)
-            plt.xlabel("Score")
-            plt.ylabel("Number of occurrences")
-            plt.title(f"Scores from {n_games} Yahtzee games with {type(self).__name__}")
-            plt.show()
-            print(f"Mean score = {np.mean(agent_scores):.3g}")
-            print(f"Standard deviation = {np.std(agent_scores):.3g}")
-
-        return agent_scores
