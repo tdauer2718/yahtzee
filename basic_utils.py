@@ -77,7 +77,7 @@ class RollValues:
     def __repr__(self):
         return f"Dice values = {', '.join([str(v) for v in self.values])}"
 
-    def checks_lower_box(self, box: Box) -> bool:
+    def checks_box(self, box: Box) -> bool:
         if box == Box.ThreeOfAKind:
             return any([v >= 3 for v in self.value_counts.values()])
         elif box == Box.FourOfAKind:
@@ -95,11 +95,11 @@ class RollValues:
             return tuple(sorted(set(self.values))) in {(1, 2, 3, 4, 5), (2, 3, 4, 5, 6)}
         elif box == Box.Yahtzee:
             return len(set(self.values)) == 1
-        elif box == Box.Chance:
+        elif box in [Box.Chance] + list(BoxCategories.UpperBox):
             return True
         else:
             raise ValueError(
-                "box must be one of the 7 boxes on the lower part of the scorecard."
+                "Box must be one of the 13 boxes on the scorecard."
             )
 
     def mode_value(self, tiebreak_by_highest_value: bool = True) -> int:
@@ -113,31 +113,32 @@ class RollValues:
         """
         Gives the score for this roll when `box` is chosen.
         """
-        for box in BoxCategories.UpperBox:
-            value = UPPER_BOX_VALUES[box]
-            return self.value_counts[value] * value if value in self.value_counts else 0
+        for upper_box in BoxCategories.UpperBox:
+            if box == upper_box:
+                value = UPPER_BOX_VALUES[box]
+                return self.value_counts[value] * value if value in self.value_counts else 0
         if box == Box.ThreeOfAKind:
-            if self.checks_lower_box(Box.ThreeOfAKind):
+            if self.checks_box(Box.ThreeOfAKind):
                 v = [v for v, c in self.value_counts.items() if c >= 3][0]
                 score = self.value_counts[v] * v
             else:
                 score = 0
             return score
         if box == Box.FourOfAKind:
-            if self.checks_lower_box(Box.FourOfAKind):
+            if self.checks_box(Box.FourOfAKind):
                 v = [v for v, c in self.value_counts.items() if c >= 4][0]
                 score = self.value_counts[v] * v
             else:
                 score = 0
             return score
         if box == Box.FullHouse:
-            return 25 if self.checks_lower_box(Box.FullHouse) else 0
+            return 25 if self.checks_box(Box.FullHouse) else 0
         if box == Box.SmallStraight:
-            return 30 if self.checks_lower_box(Box.SmallStraight) else 0
+            return 30 if self.checks_box(Box.SmallStraight) else 0
         if box == Box.LargeStraight:
-            return 40 if self.checks_lower_box(Box.LargeStraight) else 0
+            return 40 if self.checks_box(Box.LargeStraight) else 0
         if box == Box.Yahtzee:
-            return 50 if self.checks_lower_box(Box.Yahtzee) else 0
+            return 50 if self.checks_box(Box.Yahtzee) else 0
         if box == Box.Chance:
             return sum(self.values)
         else:
@@ -160,7 +161,7 @@ class RollValues:
             )
             results.append(ScoreAction(score, dice_values, box))
 
-        if self.checks_lower_box(Box.ThreeOfAKind):
+        if self.checks_box(Box.ThreeOfAKind):
             score = self.score_from_box(Box.ThreeOfAKind)
             v = [v for v, c in self.value_counts.items() if c >= 3][0]
             dice_values = self.value_counts[v] * (v,)
@@ -169,7 +170,7 @@ class RollValues:
         else:
             results.append(ScoreAction(0, (), Box.ThreeOfAKind))
 
-        if self.checks_lower_box(Box.FourOfAKind):
+        if self.checks_box(Box.FourOfAKind):
             score = self.score_from_box(Box.FourOfAKind)
             v = [v for v, c in self.value_counts.items() if c >= 4][0]
             dice_values = self.value_counts[v]  * (v,)
@@ -178,7 +179,7 @@ class RollValues:
         else:
             results.append(ScoreAction(0, (), Box.FourOfAKind))
 
-        if self.checks_lower_box(Box.FullHouse):
+        if self.checks_box(Box.FullHouse):
             score = self.score_from_box(Box.FullHouse)
             dice_values = tuple(
                 v for v in self.values
@@ -188,10 +189,10 @@ class RollValues:
         else:
             results.append(ScoreAction(0, (), Box.FullHouse))
 
-        if self.checks_lower_box(Box.SmallStraight):
+        if self.checks_box(Box.SmallStraight):
             score = self.score_from_box(Box.SmallStraight)
             box = Box.SmallStraight
-            if self.checks_lower_box(Box.LargeStraight):
+            if self.checks_box(Box.LargeStraight):
                 dice_values = tuple(v for v in self.values)
             else:
                 dice_values = tuple(
@@ -205,7 +206,7 @@ class RollValues:
         else:
             results.append(ScoreAction(0, (), Box.SmallStraight))
 
-        if self.checks_lower_box(Box.LargeStraight):
+        if self.checks_box(Box.LargeStraight):
             score = self.score_from_box(Box.LargeStraight)
             dice_values = tuple(v for v in self.values)
             box = Box.LargeStraight
@@ -213,7 +214,7 @@ class RollValues:
         else:
             results.append(ScoreAction(0, (), Box.LargeStraight))
 
-        if self.checks_lower_box(Box.Yahtzee):
+        if self.checks_box(Box.Yahtzee):
             # For simplicity, ignore Yahtzee bonus and joker rules for now.
             # Later I will likely add that functionality at the GameState
             # level instead of here, since I'd prefer that the RollValues class
@@ -236,18 +237,19 @@ class RollValues:
 
     @property
     def roll_actions(self) -> List[RollAction]:
-        return [
-            RollAction(*ps)
-            for ps in itertools.chain.from_iterable(
+        roll_action_tuples = {
+            values
+            for values in itertools.chain.from_iterable(
                 [list(itertools.combinations(self.values, i)) for i in range(1, 6)]
             )
-        ]
+        }
+        return [RollAction(*values) for values in roll_action_tuples]
 
 
 ALL_ROLL_TUPLES = {t for t in itertools.combinations_with_replacement(range(1, 7), 5)}
-TUPLES_BY_CATEGORY = {
-    box: {t for t in ALL_ROLL_TUPLES if RollValues(*t).checks_lower_box(box)}
-    for box in BoxCategories.LowerBox
+ROLL_TUPLES_BY_BOX = {
+    box: {t for t in ALL_ROLL_TUPLES if RollValues(*t).checks_box(box)}
+    for box in Box
 }
 
 

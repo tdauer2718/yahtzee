@@ -10,7 +10,7 @@ from basic_utils import (
     RollValues,
     RollAction,
     remove_dice,
-    TUPLES_BY_CATEGORY,
+    ROLL_TUPLES_BY_BOX,
 )
 
 
@@ -42,7 +42,7 @@ def box_probability_from_action(
     if box not in BoxCategories.LowerBox:
         raise ValueError("The box must be in the lower section.")
     probability = 0
-    for t in TUPLES_BY_CATEGORY[box]:
+    for t in ROLL_TUPLES_BY_BOX[box]:
         probability += hit_probability_from_action(
             roll_values, roll_action, RollValues(*t)
         )
