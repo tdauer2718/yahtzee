@@ -36,6 +36,7 @@ class BoxCategories:
         Box.Chance,
     }
 
+
 UPPER_BOX_VALUES: Dict[Box, int] = {
     Box.Ones: 1,
     Box.Twos: 2,
@@ -98,9 +99,7 @@ class RollValues:
         elif box in [Box.Chance] + list(BoxCategories.UpperBox):
             return True
         else:
-            raise ValueError(
-                "Box must be one of the 13 boxes on the scorecard."
-            )
+            raise ValueError("Box must be one of the 13 boxes on the scorecard.")
 
     def mode_value(self, tiebreak_by_highest_value: bool = True) -> int:
         if tiebreak_by_highest_value:
@@ -116,7 +115,11 @@ class RollValues:
         for upper_box in BoxCategories.UpperBox:
             if box == upper_box:
                 value = UPPER_BOX_VALUES[box]
-                return self.value_counts[value] * value if value in self.value_counts else 0
+                return (
+                    self.value_counts[value] * value
+                    if value in self.value_counts
+                    else 0
+                )
         if box == Box.ThreeOfAKind:
             if self.checks_box(Box.ThreeOfAKind):
                 v = [v for v, c in self.value_counts.items() if c >= 3][0]
@@ -173,7 +176,7 @@ class RollValues:
         if self.checks_box(Box.FourOfAKind):
             score = self.score_from_box(Box.FourOfAKind)
             v = [v for v, c in self.value_counts.items() if c >= 4][0]
-            dice_values = self.value_counts[v]  * (v,)
+            dice_values = self.value_counts[v] * (v,)
             box = Box.FourOfAKind
             results.append(ScoreAction(score, dice_values, box))
         else:
@@ -248,8 +251,7 @@ class RollValues:
 
 ALL_ROLL_TUPLES = {t for t in itertools.combinations_with_replacement(range(1, 7), 5)}
 ROLL_TUPLES_BY_BOX = {
-    box: {t for t in ALL_ROLL_TUPLES if RollValues(*t).checks_box(box)}
-    for box in Box
+    box: {t for t in ALL_ROLL_TUPLES if RollValues(*t).checks_box(box)} for box in Box
 }
 
 
@@ -372,9 +374,11 @@ class GameState:
         self.turn_started = True
 
     @property
-    def possible_score_actions(self) -> List[ScoreAction]:
+    def sorted_possible_score_actions(self) -> List[ScoreAction]:
         """
         Uses scorecard and roll_values to return the possible ScoreAction values.
+        The returned list is sorted so that the action with the highest score
+        is first.
         """
         return sorted(
             [
@@ -402,7 +406,7 @@ class GameState:
         Uses scorecard, roll_values, and rolls_completed to determine the possible actions,
         which can be RollAction or ScoreAction values.
         """
-        return self.possible_score_actions + self.possible_roll_actions
+        return self.sorted_possible_score_actions + self.possible_roll_actions
 
     def re_roll(self, *dice_values_to_roll: int):
         """
@@ -432,7 +436,9 @@ class GameState:
             )
         # will need to update when I implement joker rules
         try:
-            score = [a for a in self.possible_score_actions if a.box == box][0].score
+            score = [a for a in self.sorted_possible_score_actions if a.box == box][
+                0
+            ].score
         except IndexError:
             raise ValueError("You are trying to use a box that is already filled in.")
         self.scorecard.fill_in_box(box, score)
@@ -443,10 +449,10 @@ class GameState:
     @property
     def best_scores(self, n: int = 3, print_only=True):
         if print_only:
-            for a in self.possible_score_actions[:n]:
+            for a in self.sorted_possible_score_actions[:n]:
                 print(a)
         else:
-            return self.possible_score_actions[:n]
+            return self.sorted_possible_score_actions[:n]
 
     def take_action(self, action: Union[ScoreAction, RollAction]):
         if isinstance(action, ScoreAction):

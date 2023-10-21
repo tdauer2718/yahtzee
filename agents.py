@@ -48,6 +48,7 @@ class Agent(ABC):
             plt.show()
             print(f"Mean score = {np.mean(agent_scores):.3g}")
             print(f"Standard deviation = {np.std(agent_scores):.3g}")
+            print(f"Median score = {np.median(agent_scores):.3g}")
 
         return agent_scores
 
@@ -68,11 +69,12 @@ class GreedyAgent(Agent):
     """
     A completely greedy gameplay agent. Given a game state,
     it always selects the action that gives the highest immediate
-    reward. That is, on each turn it always picks the highest score after just the first roll.
+    reward. That is, on each turn it always picks the highest score
+    after just the first roll.
     """
 
     def choose_action(self, game_state: GameState) -> ScoreAction:
-        return game_state.possible_score_actions[0]
+        return game_state.sorted_possible_score_actions[0]
 
 
 class EpsilonGreedyAgent(Agent):
@@ -87,5 +89,5 @@ class EpsilonGreedyAgent(Agent):
         if r < self.epsilon and len(game_state.possible_roll_actions) != 0:
             action = random.choice(game_state.possible_roll_actions)
         else:
-            action = game_state.possible_score_actions[0]
+            action = game_state.sorted_possible_score_actions[0]
         return action
