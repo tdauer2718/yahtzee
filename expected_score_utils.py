@@ -7,6 +7,7 @@ from typing import Dict, List, Optional, Set, Tuple, Union
 from basic_utils import (
     ALL_ROLL_TUPLES,
     Box,
+    BoxCategories,
     RollValues,
     RollAction,
     ScoreAction,
@@ -102,7 +103,9 @@ def expected_scores_table() -> pd.DataFrame:
     return df
 
 
-def best_roll_action_for_box_with_score(roll_values: RollValues, box: Box) -> Tuple[Optional[RollAction], float]:
+def best_roll_action_for_box_with_score(
+    roll_values: RollValues, box: Box, upper_box_multiplier: float = 1.0
+) -> Tuple[Optional[RollAction], float]:
     """
     Given a set of dice values and a box, returns the dice to roll in order to maximize
     the expected value of the score in the box, and also gives the expecte score. If
@@ -110,27 +113,51 @@ def best_roll_action_for_box_with_score(roll_values: RollValues, box: Box) -> Tu
     """
     row = expected_scores_table().loc[roll_values.values, :].loc[box.name]
     roll_action_tuple, score = row["dice_values_to_roll"], row["expected_score"]
-    roll_action = RollAction(*roll_action_tuple) if len(roll_action_tuple) != 0 else None
-    return roll_action, score
+    roll_action = (
+        RollAction(*roll_action_tuple) if len(roll_action_tuple) != 0 else None
+    )
+    return (
+        roll_action,
+        upper_box_multiplier * score if box in BoxCategories.UpperBox else score,
+    )
 
 
-def best_roll_action_for_box(roll_values: RollValues, box: Box) -> Optional[RollAction]:
+def best_roll_action_for_box(
+    roll_values: RollValues, box: Box, upper_box_multiplier: float = 1.0
+) -> Optional[RollAction]:
     """
     Given a set of dice values and a box, returns the dice to roll in order to maximize
     the expected value of the score in the box. If rolling no dice gives the best score,
     then None is returned.
     """
-    return best_roll_action_for_box_with_score(roll_values, box)[0]
+    return best_roll_action_for_box_with_score(
+        roll_values, box, upper_box_multiplier=upper_box_multiplier
+    )[0]
 
 
-def best_action_by_box_with_score(roll_values: RollValues, allowed_boxes: Set[Box]) -> Dict[Box, Tuple[Union[RollAction, ScoreAction], float]]:
+def best_action_by_box_with_score(
+    roll_values: RollValues, allowed_boxes: Set[Box], upper_box_multiplier: float = 1.0
+) -> Dict[Box, Tuple[Union[RollAction, ScoreAction], float]]:
     result = {}
     for box in allowed_boxes:
-        best_roll_action, score = best_roll_action_for_box_with_score(roll_values, box)
-        best_action = best_roll_action if best_roll_action is not None else ScoreAction(roll_values.score_from_box(box), roll_values.values, box)
+        best_roll_action, score = best_roll_action_for_box_with_score(
+            roll_values, box, upper_box_multiplier=upper_box_multiplier
+        )
+        best_action = (
+            best_roll_action
+            if best_roll_action is not None
+            else ScoreAction(roll_values.score_from_box(box), roll_values.values, box)
+        )
         result[box] = (best_action, score)
     return result
 
 
-def greedy_best_action(roll_values: RollValues, allowed_boxes: Set[Box]) -> Union[RollAction, ScoreAction]:
-    return max(best_action_by_box_with_score(roll_values, allowed_boxes).values(), key=lambda x: x[1])[0]
+def greedy_best_action(
+    roll_values: RollValues, allowed_boxes: Set[Box], upper_box_multiplier: float = 1.0
+) -> Union[RollAction, ScoreAction]:
+    return max(
+        best_action_by_box_with_score(
+            roll_values, allowed_boxes, upper_box_multiplier=upper_box_multiplier
+        ).values(),
+        key=lambda x: x[1],
+    )[0]

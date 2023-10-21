@@ -79,11 +79,11 @@ class GreedyAgent(Agent):
 
 
 class EpsilonGreedyAgent(Agent):
-    def __init__(self, epsilon: float):
+    def __init__(self, epsilon: float, narrate=False):
         if epsilon < 0 or epsilon >= 1:
             raise ValueError("epsilon must be >= 0 and < 1.")
         self.epsilon = epsilon
-        super().__init__()
+        super().__init__(narrate=narrate)
 
     def choose_action(self, game_state: GameState) -> Union[RollAction, ScoreAction]:
         r = random.random()
