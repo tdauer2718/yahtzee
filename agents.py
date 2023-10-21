@@ -5,6 +5,7 @@ import random
 from typing import List, Union
 
 from basic_utils import GameState, RollAction, ScoreAction, ScoreCard
+from expected_score_utils import greedy_best_action
 
 
 class Agent(ABC):
@@ -91,3 +92,24 @@ class EpsilonGreedyAgent(Agent):
         else:
             action = game_state.sorted_possible_score_actions[0]
         return action
+
+
+class GreedyExpectedScoresAgent(Agent):
+    """
+    After each of the first two rolls in a turn, this agent chooses the action that
+    has the highest expected score for some box. After the third roll, it simply
+    selects the ScoreAction with the highest score (if a ScoreAction has not already
+    been taken on that turn).
+
+    Note that this agent does not necessarily take the action with the highest expected
+    score, just with the highest expected score for some box. You should think of this
+    agent as choosing a "box action" from the available boxes: it looks at the boxes,
+    determines the action that maximizes the expected score from each, and then out of
+    those actions picks the max.
+    """
+
+    def choose_action(self, game_state: GameState) -> Union[RollAction, ScoreAction]:
+        if game_state.rolls_completed < 3:
+            return greedy_best_action(game_state.roll_values, game_state.scorecard.unused_boxes)
+        else:
+            return game_state.sorted_possible_score_actions[0]
