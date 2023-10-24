@@ -109,7 +109,24 @@ class GreedyExpectedScoresAgent(Agent):
     """
 
     def choose_action(self, game_state: GameState) -> Union[RollAction, ScoreAction]:
-        if game_state.rolls_completed < 3:
-            return greedy_best_action(game_state.roll_values, game_state.scorecard.unused_boxes)
-        else:
-            return game_state.sorted_possible_score_actions[0]
+        return greedy_best_action(
+            game_state.roll_values,
+            game_state.scorecard.unused_boxes,
+            n_rolls_left=3 - game_state.rolls_completed,
+        )
+
+
+class GreedyExpectedScoresAgentUpperBoxWeighted(Agent):
+    def __init__(self, upper_box_multiplier: float, narrate=False):
+        if upper_box_multiplier < 1:
+            raise ValueError("upper_box_multiplier must be >= 1.")
+        self.upper_box_multiplier = upper_box_multiplier
+        super().__init__(narrate=narrate)
+
+    def choose_action(self, game_state: GameState) -> Union[RollAction, ScoreAction]:
+        return greedy_best_action(
+            game_state.roll_values,
+            game_state.scorecard.unused_boxes,
+            n_rolls_left=3 - game_state.rolls_completed,
+            upper_box_multiplier=self.upper_box_multiplier,
+        )

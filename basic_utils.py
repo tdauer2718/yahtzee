@@ -2,6 +2,7 @@ from collections import Counter
 from dataclasses import dataclass
 from enum import Enum
 import itertools
+import numpy as np
 import pandas as pd
 import random
 from typing import Dict, List, Optional, Set, Tuple, Union
@@ -306,6 +307,7 @@ class ScoreCard:
 
     @property
     def all_scores_dict(self) -> Dict[str, Optional[int]]:
+        # Note the key ordering is maintained in Python 3.6 and above
         return {**self.top_scores_dict, **self.bottom_scores_dict}
 
     @property
@@ -336,6 +338,10 @@ class ScoreCard:
     def fill_in_box(self, box: Box, score: int):
         setattr(self, box.value, score)
 
+    def to_array(self) -> np.ndarray:
+        return np.array(list(self.all_scores_dict.values()))
+
+
 
 def roll_first() -> RollValues:
     return RollValues(*random.choices(population=range(1, 7), k=5))
@@ -363,9 +369,16 @@ class GameState:
     def __init__(self, narrate: bool = True):
         self.narrate = narrate
         self.scorecard = ScoreCard()
-        self.turn_started = False
+        self.rolls_completed = 0
+        self.turn_started: bool = False
+        self.game_finished: bool = False
+
+    def to_array(self) -> np.ndarray:
+        return np.array(list(self.roll_values.values) + [self.rolls_completed] + list(self.scorecard.to_array()))
 
     def start_turn(self):
+        if self.game_finished:
+            raise ValueError("The game is over.")
         self.roll_values = roll_first()
         self.rolls_completed = 1
         if self.narrate:
@@ -443,6 +456,8 @@ class GameState:
             raise ValueError("You are trying to use a box that is already filled in.")
         self.scorecard.fill_in_box(box, score)
         self.turn_started = False
+        if self.scorecard.game_finished:
+            self.game_finished = True
         if self.narrate:
             print(f"Filling in {box.name}, with value {score}\n")
 
