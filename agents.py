@@ -108,25 +108,46 @@ class GreedyExpectedScoresAgent(Agent):
     those actions picks the max.
     """
 
+    def __init__(self, lookahead_rolls: int = 2, narrate=False):
+        super().__init__(narrate=narrate)
+        if lookahead_rolls not in {1, 2}:
+            raise ValueError("lookahead_rolls must be 1 or 2.")
+        self.lookahead_rolls = lookahead_rolls
+
     def choose_action(self, game_state: GameState) -> Union[RollAction, ScoreAction]:
+        n_rolls_left = (
+            3 - game_state.rolls_completed
+            if self.lookahead_rolls == 2
+            else min(1, 3 - game_state.rolls_completed) # needs to be 0 if 3 rolls have been completed
+        )
         return greedy_best_action(
             game_state.roll_values,
             game_state.scorecard.unused_boxes,
-            n_rolls_left=3 - game_state.rolls_completed,
+            n_rolls_left=n_rolls_left,
         )
 
 
 class GreedyExpectedScoresAgentUpperBoxWeighted(Agent):
-    def __init__(self, upper_box_multiplier: float, narrate=False):
+    def __init__(
+        self, upper_box_multiplier: float, lookahead_rolls: int = 2, narrate=False
+    ):
+        super().__init__(narrate=narrate)
         if upper_box_multiplier < 1:
             raise ValueError("upper_box_multiplier must be >= 1.")
         self.upper_box_multiplier = upper_box_multiplier
-        super().__init__(narrate=narrate)
+        if lookahead_rolls not in {1, 2}:
+            raise ValueError("lookahead_rolls must be 1 or 2.")
+        self.lookahead_rolls = lookahead_rolls
 
     def choose_action(self, game_state: GameState) -> Union[RollAction, ScoreAction]:
+        n_rolls_left = (
+            3 - game_state.rolls_completed
+            if self.lookahead_rolls == 2
+            else min(1, 3 - game_state.rolls_completed) # needs to be 0 if 3 rolls have been completed
+        )
         return greedy_best_action(
             game_state.roll_values,
             game_state.scorecard.unused_boxes,
-            n_rolls_left=3 - game_state.rolls_completed,
+            n_rolls_left=n_rolls_left,
             upper_box_multiplier=self.upper_box_multiplier,
         )

@@ -48,6 +48,25 @@ UPPER_BOX_VALUES: Dict[Box, int] = {
 }
 
 
+# Order should be preserved when we iterate through Box,
+# but map explicitly here to be safe
+BOX_ENUMERATION: Dict[Box, int] = {
+    Box.Ones: 0,
+    Box.Twos: 1,
+    Box.Threes: 2,
+    Box.Fours: 3,
+    Box.Fives: 4,
+    Box.Sixes: 5,
+    Box.ThreeOfAKind: 6,
+    Box.FourOfAKind: 7,
+    Box.FullHouse: 8,
+    Box.SmallStraight: 9,
+    Box.LargeStraight: 10,
+    Box.Yahtzee: 11,
+    Box.Chance: 12,
+}
+
+
 class RollAction:
     def __init__(self, *dice_values_to_roll: int):
         if len(dice_values_to_roll) < 1:
@@ -122,19 +141,9 @@ class RollValues:
                     else 0
                 )
         if box == Box.ThreeOfAKind:
-            if self.checks_box(Box.ThreeOfAKind):
-                v = [v for v, c in self.value_counts.items() if c >= 3][0]
-                score = self.value_counts[v] * v
-            else:
-                score = 0
-            return score
+            return sum(self.values) if self.checks_box(Box.ThreeOfAKind) else 0
         if box == Box.FourOfAKind:
-            if self.checks_box(Box.FourOfAKind):
-                v = [v for v, c in self.value_counts.items() if c >= 4][0]
-                score = self.value_counts[v] * v
-            else:
-                score = 0
-            return score
+            return sum(self.values) if self.checks_box(Box.FourOfAKind) else 0
         if box == Box.FullHouse:
             return 25 if self.checks_box(Box.FullHouse) else 0
         if box == Box.SmallStraight:

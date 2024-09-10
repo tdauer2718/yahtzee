@@ -1,6 +1,7 @@
 from collections import Counter
 import functools
 import math
+import numpy as np
 import pandas as pd
 from typing import Dict, List, Optional, Set, Tuple, Union
 
@@ -43,6 +44,7 @@ def create_expected_scores_table_one_roll() -> pd.DataFrame:
     boxes: List[str] = []
     roll_action_tuples: List[Tuple[int, ...]] = []
     expected_scores: List[float] = []
+    overall_hit_probabilities: List[float] = []
 
     for roll_tuple in ALL_ROLL_TUPLES:
         roll_values = RollValues(*roll_tuple)
@@ -61,25 +63,30 @@ def create_expected_scores_table_one_roll() -> pd.DataFrame:
                     RollValues(*desired_roll_tuple).score_from_box(box)
                     for desired_roll_tuple in ROLL_TUPLES_BY_BOX[box]
                 ]
+                overall_hit_probability = sum(
+                    [p for p, s in zip(hit_probabilities, scores) if s > 0]
+                )
                 expected_score = sum([p * s for p, s in zip(hit_probabilities, scores)])
                 roll_tuples.append(roll_tuple)
                 roll_action_tuples.append(roll_action.dice_values_to_roll)
                 boxes.append(box.name)
                 expected_scores.append(expected_score)
+                overall_hit_probabilities.append(overall_hit_probability)
             # Include the case where no dice are rolled
             roll_tuples.append(roll_tuple)
             boxes.append(box.name)
             roll_action_tuples.append(tuple())
             expected_scores.append(roll_values.score_from_box(box))
-
+            overall_hit_probabilities.append(int(roll_values.score_from_box(box) > 0))
     results = {
         "roll_values": roll_tuples,
         "box": boxes,
         "dice_values_to_roll": roll_action_tuples,
         "expected_score": expected_scores,
+        "hit_probability": overall_hit_probabilities,
     }
     df = pd.DataFrame(results)
-    df.to_csv("expected_scores_by_box.csv", index=False)
+    df.to_csv("expected_scores_by_box_one_roll.csv", index=False)
     return df
 
 
@@ -88,13 +95,14 @@ def create_expected_scores_table_two_rolls():
     boxes: List[str] = []
     roll_action_tuples: List[Tuple[int, ...]] = []
     expected_scores: List[float] = []
+    overall_hit_probabilities: List[float] = []
 
     # Start with roll_values. For each possible roll_action on these values,
     # find the resulting `roll_tuple_result_from_roll_action`s and their
     # probabilities. For each of these, find the expected score from the
     # best roll_action toward the desired box. Then add up the probabilities
     # times these values to find the expected score in the desired box
-    # for each of the original roll_values.
+    # for the original roll_values.
 
     for roll_tuple in ALL_ROLL_TUPLES:
         roll_values = RollValues(*roll_tuple)
@@ -105,6 +113,8 @@ def create_expected_scores_table_two_rolls():
                 ps = (
                     []
                 )  # probability of getting each roll_tuple_result_from_roll_action
+                # I think hit_probability_from_action should be cached, as it is the
+                # same calculation regardless of which Box we're concerned with.
                 for roll_tuple_result_from_roll_action in ALL_ROLL_TUPLES:
                     p = hit_probability_from_action(
                         roll_values,
@@ -125,6 +135,13 @@ def create_expected_scores_table_two_rolls():
                     .expected_score
                     for t in roll_tuples_after_roll_action
                 ]
+                hit_probabilities_of_roll_tuples_after_best_roll_action = [
+                    best_expected_scores_table_by_box(n_rolls_left=1)
+                    .loc[t, :]
+                    .loc[box.name]
+                    .hit_probability
+                    for t in roll_tuples_after_roll_action
+                ]
                 score = sum(
                     [
                         p * s
@@ -133,21 +150,31 @@ def create_expected_scores_table_two_rolls():
                         )
                     ]
                 )
+                overall_hit_probability = sum(
+                    [
+                        p1 * p2
+                        for p1, p2 in zip(
+                            ps, hit_probabilities_of_roll_tuples_after_best_roll_action
+                        )
+                    ]
+                )
                 roll_tuples.append(roll_tuple)
                 boxes.append(box.name)
                 roll_action_tuples.append(roll_action.dice_values_to_roll)
                 expected_scores.append(score)
+                overall_hit_probabilities.append(overall_hit_probability)
             # Include the case where no dice are rolled
             roll_tuples.append(roll_tuple)
             boxes.append(box.name)
             roll_action_tuples.append(tuple())
             expected_scores.append(roll_values.score_from_box(box))
-
+            overall_hit_probabilities.append(int(roll_values.score_from_box(box) > 0))
     results = {
         "roll_values": roll_tuples,
         "box": boxes,
         "dice_values_to_roll": roll_action_tuples,
         "expected_score": expected_scores,
+        "hit_probability": overall_hit_probabilities,
     }
     df = pd.DataFrame(results)
     df.to_csv("expected_scores_by_box_two_rolls.csv", index=False)
@@ -182,10 +209,10 @@ def best_roll_action_for_box_with_score(
     box: Box,
     n_rolls_left: int,
     upper_box_multiplier: float = 1.0,
-) -> Tuple[Optional[RollAction], float]:
+) -> Tuple[Optional[RollAction], float, float]:
     """
     Given a set of dice values and a box, returns the dice to roll in order to maximize
-    the expected value of the score in the box, and also gives the expecte score. If
+    the expected value of the score in the box, and also gives the expected score. If
     rolling no dice gives the best score, then None is returned as the roll action.
     n_rolls_left = 1 gives the result if only one roll is allowed, and n_rolls_left = 2 allows
     for 2 rolls.
@@ -195,18 +222,26 @@ def best_roll_action_for_box_with_score(
         .loc[roll_values.values, :]
         .loc[box.name]
     )
-    roll_action_tuple, score = row["dice_values_to_roll"], row["expected_score"]
+    roll_action_tuple, score, probability = (
+        row["dice_values_to_roll"],
+        row["expected_score"],
+        row["hit_probability"],
+    )
     roll_action = (
         RollAction(*roll_action_tuple) if len(roll_action_tuple) != 0 else None
     )
     return (
         roll_action,
         upper_box_multiplier * score if box in BoxCategories.UpperBox else score,
+        probability,
     )
 
 
 def best_roll_action_for_box(
-    roll_values: RollValues, box: Box, n_rolls_left: int, upper_box_multiplier: float = 1.0
+    roll_values: RollValues,
+    box: Box,
+    n_rolls_left: int,
+    upper_box_multiplier: float = 1.0,
 ) -> Optional[RollAction]:
     """
     Given a set of dice values and a box, returns the dice to roll in order to maximize
@@ -226,24 +261,30 @@ def best_action_by_box_with_score(
     allowed_boxes: Set[Box],
     n_rolls_left: int,
     upper_box_multiplier: float = 1.0,
-) -> Dict[Box, Tuple[Union[RollAction, ScoreAction], float]]:
+) -> Dict[Box, Tuple[Union[RollAction, ScoreAction], float, float]]:
     result = {}
     for box in allowed_boxes:
         if n_rolls_left in {1, 2}:
-            best_roll_action, score = best_roll_action_for_box_with_score(
-                roll_values, box, n_rolls_left=n_rolls_left, upper_box_multiplier=upper_box_multiplier
+            best_roll_action, score, probability = best_roll_action_for_box_with_score(
+                roll_values,
+                box,
+                n_rolls_left=n_rolls_left,
+                upper_box_multiplier=upper_box_multiplier,
             )
             best_action = (
                 best_roll_action
                 if best_roll_action is not None
-                else ScoreAction(roll_values.score_from_box(box), roll_values.values, box)
+                else ScoreAction(
+                    roll_values.score_from_box(box), roll_values.values, box
+                )
             )
         elif n_rolls_left == 0:
             score = roll_values.score_from_box(box)
+            probability = 1
             best_action = ScoreAction(score, roll_values.values, box)
         else:
             raise ValueError("n_rolls_left must be 0, 1 or 2.")
-        result[box] = (best_action, score)
+        result[box] = (best_action, score, probability)
     return result
 
 
@@ -262,3 +303,38 @@ def greedy_best_action(
         ).values(),
         key=lambda x: x[1],
     )[0]
+
+
+def best_action_by_box_with_score_as_table(
+    roll_values: RollValues,
+    allowed_boxes: Set[Box],
+    n_rolls_left: int,
+    upper_box_multiplier: float = 1.0,
+) -> pd.DataFrame:
+    actions = best_action_by_box_with_score(
+        roll_values, allowed_boxes, n_rolls_left, upper_box_multiplier
+    )
+    NA_probability_columns = set(list(BoxCategories.UpperBox) + [Box.Chance])
+    return pd.DataFrame(
+        [
+            (
+                elem[0].name,
+                np.round(elem[1][2], 3) if elem[0] not in NA_probability_columns else pd.NA,
+                np.round(elem[1][1], 1),
+                "Score" if isinstance(elem[1][0], ScoreAction) else "Re-Roll",
+                elem[1][0].dice_values
+                if isinstance(elem[1][0], ScoreAction)
+                else elem[1][0].dice_values_to_roll,
+            )
+            for elem in sorted(
+                list(actions.items()), key=lambda x: x[1][1], reverse=True
+            )
+        ],
+        columns=[
+            "Box",
+            "Hit Probability",
+            "Expected Score",
+            "Action Type",
+            "Dice Values",
+        ],
+    )
